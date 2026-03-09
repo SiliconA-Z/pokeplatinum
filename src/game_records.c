@@ -36,12 +36,6 @@ GameRecords *SaveData_GetGameRecords(SaveData *saveData)
     return SaveData_SaveTable(saveData, SAVE_TABLE_ENTRY_GAME_RECORDS);
 }
 
-// this inline does not match when operating on the substruct
-static inline u32 HashEncodingSeed(GameRecords *records)
-{
-    return records->seed.byteSum + (records->seed.modifier << 16);
-}
-
 static void EncodeGameRecords(GameRecords *records, int id)
 {
     if (id == RECORD_UNK_000) {
@@ -49,7 +43,8 @@ static void EncodeGameRecords(GameRecords *records, int id)
     }
 
     records->seed.byteSum = SumBytes(&records->recordsU32[START_ENCODED_RECORDS], SIZE_ENCODED_RECORDS) & 0xFFFF;
-    EncodeData(&records->recordsU32[START_ENCODED_RECORDS], SIZE_ENCODED_RECORDS, HashEncodingSeed(records));
+    EncodeData(&records->recordsU32[START_ENCODED_RECORDS], SIZE_ENCODED_RECORDS,
+        records->seed.byteSum + (records->seed.modifier << 16));
 }
 
 static void DecodeGameRecords(GameRecords *records, int id)
@@ -316,19 +311,18 @@ static int GetTrainerScoreIncrement(int records)
     return sTrainerScoreIncrements[records];
 }
 
-static inline u32 SetRecordValueWithLimit(GameRecords *records, int id, u32 val, u32 limit)
-{
-    return val < limit
-        ? SetRecordValue(records, id, val)
-        : SetRecordValue(records, id, limit);
-}
-
 u32 GameRecords_SetRecordValue(GameRecords *records, int id, u32 val)
 {
     u32 limit = GetRecordLimit(id);
+    u32 new;
 
     DecodeGameRecords(records, id);
-    u32 new = SetRecordValueWithLimit(records, id, val, limit);
+    if (val < limit) {
+        new = SetRecordValue(records, id, val);
+    } else {
+        new = SetRecordValue(records, id, limit);
+    }
+
     EncodeGameRecords(records, id);
 
     return new;
@@ -360,10 +354,16 @@ u32 GameRecords_SetAndLimitRecordValue(GameRecords *records, int id, u32 val)
 u32 GameRecords_IncrementRecordValue(GameRecords *records, int id)
 {
     u32 limit = GetRecordLimit(id);
+    u32 new;
 
     DecodeGameRecords(records, id);
     u32 cur = GetRecordValue(records, id);
-    u32 new = SetRecordValueWithLimit(records, id, cur + 1, limit);
+    if (cur + 1 < limit) {
+        new = SetRecordValue(records, id, cur + 1);
+    } else {
+        new = SetRecordValue(records, id, limit);
+    }
+
     EncodeGameRecords(records, id);
 
     return new;
@@ -372,10 +372,15 @@ u32 GameRecords_IncrementRecordValue(GameRecords *records, int id)
 u32 GameRecords_AddToRecordValue(GameRecords *records, int id, u32 toAdd)
 {
     u32 limit = GetRecordLimit(id);
+    u32 new;
 
     DecodeGameRecords(records, id);
     u32 cur = GetRecordValue(records, id);
-    u32 new = SetRecordValueWithLimit(records, id, cur + toAdd, limit);
+    if (cur + toAdd < limit) {
+        new = SetRecordValue(records, id, cur + toAdd);
+    } else {
+        new = SetRecordValue(records, id, limit);
+    }
     EncodeGameRecords(records, id);
 
     return new;
